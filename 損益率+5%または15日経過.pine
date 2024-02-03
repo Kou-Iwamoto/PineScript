@@ -1,0 +1,47 @@
+//@version=5
+strategy("損益率+5%または15日経過", overlay=true, initial_capital=10000000)
+
+start_date = timestamp(2016, 01, 01, 00, 00)
+//終値が100日間高値から-20%以内
+price_condition = close >= ta.highest(100) * 0.80
+//14日+DIが14日-DIより大きい、かつADXが1日前のADXよりも大きい
+[diplus, diminus, adx] = ta.dmi(14, 14)
+di_condition = diplus > diminus and adx > adx[1]
+//移動平均線
+value = close
+ma_5 = ta.sma(value, 5)
+ma_25 = ta.sma(value, 25)
+ma_75 = ta.sma(value, 75)
+ma_condition = ma_5 > ma_25 and ma_25 > ma_75
+
+//エントリー条件
+entry_condition = time >= start_date and price_condition and di_condition and ma_condition
+var array_entry_price = array.new_float(0)
+var entry_bar_index = int(na)
+var isEntry = false
+var cnt = 0
+
+//前日終値時点の評価損益率（最安エントリー基準）
+min = array.min(array_entry_price)
+pnl_percentage = (close[1] - min) * 100 / min
+//保有期間（最終エントリー基準）
+days_elapsed = bar_index - entry_bar_index
+
+//エグジット条件
+exit_condition = pnl_percentage > 5 or days_elapsed >= 15
+
+//エントリーとエグジット条件に基づいてトレード
+if cnt < 3 and entry_condition and not exit_condition
+    //総資金に対するリスク＝20%、各ロットに対するリスク＝5%
+    qty = strategy.equity * 0.02 / (open * 0.05)
+	strategy.order("Entry", strategy.long, qty)
+    array.push(array_entry_price, open)
+    entry_bar_index := bar_index
+    isEntry := true
+    cnt := cnt + 1
+if isEntry and exit_condition
+    strategy.close("Entry")
+    array_entry_price := array.new_float(0)
+    entry_bar_index := int(na)
+    isEntry := false
+    cnt := 0
